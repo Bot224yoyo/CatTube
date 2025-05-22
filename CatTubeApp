@@ -1,0 +1,128 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tubemate TikTok</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: sans-serif; background: #000; color: #fff; overflow: hidden; }
+    #login, #main, #channel { display: none; position: absolute; width: 100%; height: 100%; justify-content: center; align-items: center; flex-direction: column; }
+    video { width: 100vw; height: 100vh; object-fit: cover; }
+    .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 10px; }
+    .top { display: flex; justify-content: space-between; }
+    .bottom { position: absolute; bottom: 10px; width: 100%; text-align: center; }
+    button, input { margin: 5px; padding: 10px; font-size: 16px; }
+    .menu-btn { position: absolute; bottom: 10px; left: 10px; }
+    .view-btn { background: rgba(0,0,0,0.5); color: #fff; border: none; padding: 5px 10px; }
+  </style>
+</head>
+<body>
+<div id="login">
+  <h2>Đăng nhập / Đăng ký</h2>
+  <input id="username" placeholder="Nhập tên người dùng" />
+  <button onclick="login()">Vào</button>
+</div><div id="main">
+  <video id="video" autoplay loop muted></video>
+  <div class="overlay">
+    <div class="top">
+      <div id="videoUser"></div>
+      <button class="view-btn" onclick="viewChannel()">View</button>
+    </div>
+    <div class="bottom">
+      <button onclick="nextVideo()">Vuốt lên</button>
+      <button onclick="document.getElementById('upload').click()">Đăng video</button>
+      <input type="file" id="upload" accept="video/*" style="display:none" onchange="uploadVideo(event)" />
+    </div>
+  </div>
+</div><div id="channel">
+  <h2>Kênh: <span id="channelName"></span></h2>
+  <button onclick="toggleStar()" id="starBtn">Star</button>
+  <button onclick="backToMain()">Quay lại</button>
+</div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script><script>
+const supabase = supabase.createClient(
+  "https://xbuaekkpispdagfuswbu.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhidWFla2twaXNwZGFnZnVzd2J1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc4ODg5NDgsImV4cCI6MjA2MzQ2NDk0OH0.Y8o9G72BiCCvXBgR6r4xbO4y_9bmGKrcR_eDhroqSnI"
+);
+
+let currentUser = "";
+let videos = [];
+let index = 0;
+let currentViewUser = "";
+
+function login() {
+  currentUser = document.getElementById("username").value.trim();
+  if (!currentUser) return alert("Nhập tên!");
+  document.getElementById("login").style.display = "none";
+  document.getElementById("main").style.display = "flex";
+  loadVideos();
+}
+
+async function loadVideos() {
+  const { data } = await supabase.from("videos").select("*").order("created_at", { ascending: false });
+  videos = data || [];
+  index = 0;
+  showVideo();
+}
+
+function showVideo() {
+  if (!videos[index]) return;
+  const v = videos[index];
+  document.getElementById("video").src = v.url;
+  document.getElementById("videoUser").innerText = v.username;
+  currentViewUser = v.username;
+}
+
+function nextVideo() {
+  index = (index + 1) % videos.length;
+  showVideo();
+}
+
+function viewChannel() {
+  document.getElementById("main").style.display = "none";
+  document.getElementById("channel").style.display = "flex";
+  document.getElementById("channelName").innerText = currentViewUser;
+  checkStar();
+}
+
+function backToMain() {
+  document.getElementById("channel").style.display = "none";
+  document.getElementById("main").style.display = "flex";
+}
+
+async function checkStar() {
+  const { data } = await supabase.from("stars").select("*").eq("from_user", currentUser).eq("to_user", currentViewUser);
+  document.getElementById("starBtn").innerText = data.length ? "Bỏ Star" : "Star";
+}
+
+async function toggleStar() {
+  const { data } = await supabase.from("stars").select("*").eq("from_user", currentUser).eq("to_user", currentViewUser);
+  if (data.length) {
+    await supabase.from("stars").delete().match({ from_user: currentUser, to_user: currentViewUser });
+  } else {
+    await supabase.from("stars").insert({ from_user: currentUser, to_user: currentViewUser });
+  }
+  checkStar();
+}
+
+async function uploadVideo(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  form.append("upload_preset", "Tubemate");
+
+  const res = await fetch("https://api.cloudinary.com/v1_1/ddfjxbbyl/video/upload", {
+    method: "POST",
+    body: form
+  });
+  const data = await res.json();
+  if (data.secure_url) {
+    await supabase.from("videos").insert({ url: data.secure_url, username: currentUser });
+    alert("Đăng video thành công!");
+    loadVideos();
+  } else {
+    alert("Lỗi đăng video!");
+  }
+}
+</script></body>
+</html>
